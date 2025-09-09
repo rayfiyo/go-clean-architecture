@@ -15,101 +15,118 @@
       - https://www.cool-man.org/software-architecture/
       - https://nadermedhatthoughts.medium.com/granularity-in-software-architecture-bec7c432d6d3
 
-## 用語対応
-
-- エンティティ(domain):
-  業務ルールの中心（純粋な構造体や値オブジェクト、ドメインサービス）
-- ユースケース(usecase / application):
-  操作手順・入力/出力ポート（ビジネスフロー）
-- インターフェースアダプタ(interface / adapters):
-  DB/HTTP など外界との橋渡し（実装が集まる）
-- フレームワーク&ドライバ(infrastructure / presentation):
-  Web フレームワーク、DB クライアント等
-
 ## 層の分け方の例
 
 1. 核方針（コアポリシー）、業務概念（ドメイン）、処理手順（ユースケース）、詳細実装
 2. ドメイン（コアポリシー + Entities + Value）、処理手順（ユースケース）、詳細実装
 3. ボブおじさん(Robert C. Martin)の図
 
+### ありがちな例と用語
+
+1. ドメイン層
+
+- 役割: ビジネスルールそのものを表す層で、外部の技術や I/O には依存しない
+- 構成要素:
+  - エンティティ (Entity): 業務上の概念を表現するモデル
+  - ドメインサービス (Domain Service): エンティティに属さないルールのまとめ
+- 特徴:
+  - フレームワークやデータベースに一切依存しない「純粋なロジック」
+  - 最も内側で、他の層から再利用される中心
+
+2. アプリケーション層 (Application Layer)
+
+- 役割: ドメインをどう使うかの「手順書」を定める層
+- 構成要素:
+  - ユースケース (Use Case / Interactor):
+    入力を受け取り、ドメインサービスやエンティティを呼び出して、
+    結果を出力にまとめる具体的な処理
+  - ポート (Port): ユースケースが外部から呼び出されるためのインタフェース
+    - InputPort / OutputPort がある。
+- 特徴:
+  - ドメイン層に依存するが、外部 (HTTP, DB) には依存しない
+  - システムに「どんな機能があるか」をユースケースとして定義する場
+
+3. インターフェース層 / アダプタ層 (Interface / Adapter Layer)
+
+- 役割: 外界（Web, CLI, DB, ファイルなど）とアプリケーション層をつなぐ「翻訳者」
+- 構成要素:
+  - コントローラ / ハンドラ: HTTP や CLI からのリクエストを受けて、ユースケースを呼び出す
+  - パーサ: 外部表現をドメインオブジェクトに変換
+  - バリデータ: 入力の整合性チェックを行い、ドメインに渡す前に不正データを弾く
+  - プレゼンター: ユースケースの出力を HTTP レスポンスや JSON 形式に整形する
+- 特徴:
+  - 外部フォーマットの依存をここに閉じ込める
+  - ここを差し替えれば、同じユースケースを REST 以外（gRPC, CLI）でも利用可能
+
+4. インフラストラクチャ層 (Infrastructure Layer)
+
+- 役割: 実際の技術要素（フレームワーク、データベース、ログ、クラウド環境）を扱う
+- 構成要素:
+  - フレームワーク起動: Gin サーバ、ルーティング初期化
+  - DI: 依存解決。どの Decoder 実装を使うかなど
+  - 永続化や外部サービス連携: DB や API 呼び出し
+  - デプロイ設定: Dockerfile, ECS タスク定義など
+- 特徴:
+  - 最も外側で、変化しやすい部分
+  - 「実行の場」を提供するが、ビジネスルールには立ち入らない
+
 ## 作る手順の例１(Go)
 
-### 1. 「単一プロダクト」の外枠を決める
+### 1. 設計
 
-- 外部公開バイナリの入口は `cmd/<appname>/main.go`
-- ライブラリ化しないアプリなら、実装は `internal/` の下に寄せる
-  - 外部から import 不能にできるため
+https://architecting.hateblo.jp/entry/2025/05/02/162516
+
+- ユビキタス言語の定義
+- 入力 → ユースケースで実施すること → 出力 を考える
+- その他、どんな構成・機能・入出力か 考える
+
+### 2. 各層で実装することを考える
+
+#### 例: ある bash のコマンドを実行した結果を返す実装
+
+- `各層の実装例.md` を参照
+
+### 3. 層をフォルダにマッピングする
+
+#### 例: ある bash のコマンドを実行した結果を返す実装
+
+- Command: Go で実行しやすい形式に落とし込んだ文字列
+- Result: 実行結果
+- CommandType: 命令の種類
 
 ```
-hoge-app-repo/
-├─ cmd/
-│  └─ hoge-app/
-│     └─ main.go
+/app
+├─ cmd/server/main.go           # エントリポイント（DI呼び出し＋HTTP起動）
 ├─ internal/
+│  ├─ domain/                   # 1. ドメイン層（純粋ルール）
+│  │  ├─ command.go
+│  │  ├─ result.go
+│  │  └─ decoder.go
+│  ├─ usecase/                  # 2. アプリケーション層（手順 = ユースケース）
+│  │  ├─ ports.go
+│  │  └─ decode_interactor.go
+│  ├─ adapter/                  # 3. インターフェース/アダプタ層
+│  │  ├─ http/
+│  │  │  ├─ handler.go
+│  │  │  └─ router.go
+│  │  ├─ parse/
+│  │  │  ├─ parser.go
+│  │  │  └─ whitespace_parser.go
+│  │  ├─ validate/
+│  │  │  ├─ validator.go
+│  │  │  └─ command_validator.go
+│  │  └─ presenter/
+│  │     └─ response.go
+│  └─ platform/                 # 4. インフラ層（技術詳細/起動/DI）
+│     ├─ di.go
+│     └─ config.go
 └─ go.mod
 ```
 
-## 2. 層をフォルダにマッピングする
-
-- 最も迷いにくい無難案：
+### 4. 実運用のための“運用”フォルダ（任意）
 
 ```
-internal/
-├─ domain/          # エンティティ、ドメインサービス、リポジトリIF
-├─ usecase/         # 入力/出力ポート、ユースケース実装
-├─ interface/       # コントローラ、プレゼンター、ゲートウェイIF実装の薄い層
-├─ infrastructure/  # DB, 外部API, ロガーなど具体実装
-└─ presentation/    # WebサーバやHTTPルーティング（Echo/Fiber等）
-```
-
-- 許容される依存方向の例
-  - `presentation -> interface -> usecase -> domain`
-  - `interface -> infrastructure`
-
-## 3. 「境界の契約（インターフェース）」を先に置く
-
-- `domain`: エンティティ（構造体）、リポジトリのインターフェース
-- `usecase`: ユースケース入力/出力ポート（インターフェース）
-- 実装は後で `infrastructure` / `presentation` に置く
-
-### 例：ToDo アプリの最小雛形
-
-- このレポジトリの実装のこと
-- 次の順番で実装する（上から順に実装）
-
-```
-internal/
-├── domain
-│   ├── todo.go
-│   └── todo_repository.go
-├─── usecase
-│   └── add_todo.go
-├── interface
-│   └── http
-│       └── todo_handler.go
-├── infrastructure
-│   └── sqlite
-│       └── todo_repository_sqlite.go
-└── presentation
-    └── httpserver
-        └── router.go
-cmd/
-└── todoapp
-    └── main.go # ここで、具体的な実装を組み立てる（依存性逆転）、内部は外部を知らない
-```
-
-- 大規模の場合、`internal/todo/domain/` のように、機能別にフォルダを切ると良い
-
-### 4. テストの置き場
-
-- ユースケースは、ブラックボックスでテスト
-  - fake リポジトリを `usecase` 直下や `test/` に置く
-- インフラは、結合テスト用に `test/integration/` を用意
-- Go は、`*_test.go` を各パッケージに置くのが自然
-
-### 5. 実運用のための“運用”フォルダ（任意）
-
-```
+api/          # openapi.yml など、外部契約
 build/        # Dockerfile, CIスクリプト
 configs/      # 設定テンプレート（YAML/TOML等）
 migrations/   # DBマイグレーション
