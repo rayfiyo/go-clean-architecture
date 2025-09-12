@@ -82,17 +82,13 @@ https://architecting.hateblo.jp/entry/2025/05/02/162516
 
 ### 2. 各層で実装することを考える
 
-#### 例: ある bash のコマンドを実行した結果を返す実装
+#### 例: ある Whitespace のコマンドを実行した結果を返す実装
 
 - `各層の実装例.md` を参照
 
 ### 3. 層をフォルダにマッピングする
 
-#### 例: ある bash のコマンドを実行した結果を返す実装
-
-- Command: Go で実行しやすい形式に落とし込んだ文字列
-- Result: 実行結果
-- CommandType: 命令の種類
+#### 例: ある Whitespace のコマンドを実行した結果を返す実装
 
 ```
 /app
@@ -106,17 +102,17 @@ https://architecting.hateblo.jp/entry/2025/05/02/162516
 │  │  ├─ ports.go
 │  │  └─ decode_interactor.go
 │  ├─ adapter/                  # 3. インターフェース/アダプタ層
-│  │  ├─ http/
-│  │  │  ├─ handler.go
-│  │  │  └─ router.go
 │  │  ├─ parse/
 │  │  │  ├─ parser.go
 │  │  │  └─ whitespace_parser.go
 │  │  ├─ validate/
 │  │  │  ├─ validator.go
 │  │  │  └─ command_validator.go
-│  │  └─ presenter/
-│  │     └─ response.go
+│  │  ├─ presenter/
+│  │  │  └─ response.go
+│  │  └── http/
+│  │     ├─ handler.go
+│  │     └─ router.go
 │  └─ platform/                 # 4. インフラ層（技術詳細/起動/DI）
 │     ├─ di.go
 │     └─ config.go
